@@ -14,9 +14,7 @@ export default function AdminSettings() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-  const token = localStorage.getItem('admin_token') || '';
-
-  const handleChangePassword = async (e: React.FormEvent) => {
+const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
@@ -29,7 +27,7 @@ export default function AdminSettings() {
     setLoading(true);
     setError('');
     try {
-      await api.adminChangePassword(token, currentPassword, newPassword);
+      await api.adminChangePassword(currentPassword, newPassword);
       setSuccess(true);
       setCurrentPassword('');
       setNewPassword('');

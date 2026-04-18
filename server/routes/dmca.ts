@@ -3,19 +3,20 @@ import { z } from 'zod';
 import { getDb } from '../db.js';
 import { dmcaRequests, activityLog } from '../../shared/schema.js';
 import type { ApiResponse } from '../../shared/types.js';
+import { publicWriteLimiter } from '../middleware/rateLimit.js';
 
 const router = Router();
 
 const dmcaSchema = z.object({
-  copyrightOwner: z.string().min(2, 'Copyright owner name is required'),
-  email: z.string().email('Valid email is required'),
-  contentUrl: z.string().url('Valid content URL is required'),
-  originalUrl: z.string().url('Valid original URL is required'),
-  description: z.string().optional(),
-  signature: z.string().min(2, 'Digital signature is required'),
+  copyrightOwner: z.string().trim().min(2, 'Copyright owner name is required').max(255),
+  email: z.string().email('Valid email is required').max(255),
+  contentUrl: z.string().url('Valid content URL is required').max(2048),
+  originalUrl: z.string().url('Valid original URL is required').max(2048),
+  description: z.string().max(5_000).optional(),
+  signature: z.string().trim().min(2, 'Digital signature is required').max(255),
 });
 
-router.post('/', async (req, res) => {
+router.post('/', publicWriteLimiter, async (req, res) => {
   try {
     const data = dmcaSchema.parse(req.body);
     const db = getDb();
@@ -46,6 +47,8 @@ router.post('/', async (req, res) => {
       res.status(400).json({ success: false, error: error.errors[0].message });
       return;
     }
+    // eslint-disable-next-line no-console
+    console.error('[dmca]', error);
     res.status(500).json({ success: false, error: 'Failed to submit DMCA request' });
   }
 });

@@ -23,8 +23,7 @@ export default function AdminLogin() {
     try {
       const res = await api.adminLogin(email, password);
       if (res.success && res.data) {
-        localStorage.setItem('admin_token', res.data.token);
-        localStorage.setItem('admin_user', JSON.stringify(res.data.admin));
+        sessionStorage.setItem('admin_user', JSON.stringify(res.data.admin));
         navigate('/admin/dashboard');
       } else {
         setError(res.error || 'Login failed');

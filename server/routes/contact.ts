@@ -3,17 +3,18 @@ import { z } from 'zod';
 import { getDb } from '../db.js';
 import { contactSubmissions, activityLog } from '../../shared/schema.js';
 import type { ApiResponse } from '../../shared/types.js';
+import { publicWriteLimiter } from '../middleware/rateLimit.js';
 
 const router = Router();
 
 const contactSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Valid email is required'),
-  subject: z.string().min(3, 'Subject must be at least 3 characters'),
-  message: z.string().min(10, 'Message must be at least 10 characters'),
+  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(255),
+  email: z.string().email('Valid email is required').max(255),
+  subject: z.string().trim().min(3, 'Subject must be at least 3 characters').max(500),
+  message: z.string().trim().min(10, 'Message must be at least 10 characters').max(10_000, 'Message too long'),
 });
 
-router.post('/', async (req, res) => {
+router.post('/', publicWriteLimiter, async (req, res) => {
   try {
     const data = contactSchema.parse(req.body);
     const db = getDb();
@@ -42,6 +43,8 @@ router.post('/', async (req, res) => {
       res.status(400).json({ success: false, error: error.errors[0].message });
       return;
     }
+    // eslint-disable-next-line no-console
+    console.error('[contact]', error);
     res.status(500).json({ success: false, error: 'Failed to submit contact form' });
   }
 });

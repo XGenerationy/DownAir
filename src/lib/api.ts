@@ -2,6 +2,7 @@ const API_BASE = '/api';
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${endpoint}`, {
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...options?.headers,
@@ -33,6 +34,7 @@ export interface MediaAnalysisData {
     duration?: number;
     author?: string;
     description?: string;
+    url: string;
     formats: {
       formatId: string;
       format: string;
@@ -123,7 +125,7 @@ export const api = {
       body: JSON.stringify({ url, formatId, quality }),
     }),
 
-  getDownloadUrl: (token: string) => `${API_BASE}/download/proxy/${token}`,
+  getDownloadUrl: (token: string) => `${API_BASE}/download/proxy/${encodeURIComponent(token)}`,
 
   getStats: () => request<ApiResponse<DownloadStatsData>>('/download/stats'),
 
@@ -153,7 +155,7 @@ export const api = {
     return request<ApiResponse<ContentPageData[]>>(`/guides?${searchParams.toString()}`);
   },
 
-  getGuide: (slug: string) => request<ApiResponse<ContentPageData>>(`/guides/${slug}`),
+  getGuide: (slug: string) => request<ApiResponse<ContentPageData>>(`/guides/${encodeURIComponent(slug)}`),
 
   getCategories: () => request<ApiResponse<string[]>>('/guides/categories'),
 
@@ -177,68 +179,48 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
 
-  adminDashboard: (token: string) =>
-    request<ApiResponse<DashboardData>>('/admin/dashboard', {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+  adminLogout: () => request<ApiResponse>('/admin/logout', { method: 'POST' }),
 
-  adminGetContent: (token: string) =>
-    request<ApiResponse<ContentPageData[]>>('/admin/content', {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+  adminMe: () => request<ApiResponse<{ id: number; email: string }>>('/admin/me'),
 
-  adminGetContentPage: (token: string, id: number) =>
-    request<ApiResponse<ContentPageData>>(`/admin/content/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+  adminDashboard: () => request<ApiResponse<DashboardData>>('/admin/dashboard'),
 
-  adminCreateContent: (token: string, data: Record<string, unknown>) =>
+  adminGetContent: () => request<ApiResponse<ContentPageData[]>>('/admin/content'),
+
+  adminGetContentPage: (id: number) =>
+    request<ApiResponse<ContentPageData>>(`/admin/content/${id}`),
+
+  adminCreateContent: (data: Record<string, unknown>) =>
     request<ApiResponse<ContentPageData>>('/admin/content', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(data),
     }),
 
-  adminUpdateContent: (token: string, id: number, data: Record<string, unknown>) =>
+  adminUpdateContent: (id: number, data: Record<string, unknown>) =>
     request<ApiResponse<ContentPageData>>(`/admin/content/${id}`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify(data),
     }),
 
-  adminDeleteContent: (token: string, id: number) =>
-    request<ApiResponse>(`/admin/content/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+  adminDeleteContent: (id: number) =>
+    request<ApiResponse>(`/admin/content/${id}`, { method: 'DELETE' }),
 
-  adminGetContacts: (token: string) =>
-    request<ApiResponse<ContactData[]>>('/admin/contacts', {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+  adminGetContacts: () => request<ApiResponse<ContactData[]>>('/admin/contacts'),
 
-  adminMarkContactRead: (token: string, id: number) =>
-    request<ApiResponse>(`/admin/contacts/${id}/read`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+  adminMarkContactRead: (id: number) =>
+    request<ApiResponse>(`/admin/contacts/${id}/read`, { method: 'PUT' }),
 
-  adminGetDmca: (token: string) =>
-    request<ApiResponse<DmcaData[]>>('/admin/dmca', {
-      headers: { Authorization: `Bearer ${token}` },
-    }),
+  adminGetDmca: () => request<ApiResponse<DmcaData[]>>('/admin/dmca'),
 
-  adminUpdateDmcaStatus: (token: string, id: number, status: string) =>
+  adminUpdateDmcaStatus: (id: number, status: string) =>
     request<ApiResponse>(`/admin/dmca/${id}/status`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify({ status }),
     }),
 
-  adminChangePassword: (token: string, currentPassword: string, newPassword: string) =>
+  adminChangePassword: (currentPassword: string, newPassword: string) =>
     request<ApiResponse>('/admin/change-password', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
 };

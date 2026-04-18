@@ -1,6 +1,8 @@
-import 'dotenv/config';
+import { config } from './config.js';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
@@ -11,15 +13,39 @@ import dmcaRouter from './routes/dmca.js';
 import adminRouter from './routes/admin.js';
 import guidesRouter from './routes/guides.js';
 import setupRouter from './routes/setup.js';
+import { apiLimiter } from './middleware/rateLimit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = parseInt(process.env.APP_PORT || '3001');
 
 const app = express();
 
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.set('trust proxy', 1);
+
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }),
+);
+
+const corsOrigins = Array.from(
+  new Set([config.APP_URL, 'http://localhost:5173', 'http://localhost:3001'].filter(Boolean)),
+);
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin || corsOrigins.includes(origin)) return cb(null, true);
+      cb(new Error('CORS: origin not allowed'));
+    },
+    credentials: true,
+  }),
+);
+
+app.use(cookieParser());
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+app.use('/api', apiLimiter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -39,24 +65,23 @@ app.get('/api/sitemap', async (_req, res) => {
     const { eq } = await import('drizzle-orm');
     const db = getDb();
     const pages = await db.select().from(contentPages).where(eq(contentPages.isPublished, true));
-    const baseUrl = process.env.APP_URL || 'https://downair.net';
+    const baseUrl = config.APP_URL || 'https://downair.net';
 
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
-
     const staticPages = ['', '/about', '/contact', '/dmca', '/guides'];
     for (const p of staticPages) {
       xml += `  <url><loc>${baseUrl}${p}</loc><changefreq>weekly</changefreq><priority>${p === '' ? '1.0' : '0.8'}</priority></url>\n`;
     }
-
     for (const page of pages) {
       xml += `  <url><loc>${baseUrl}/guides/${page.slug}</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>\n`;
     }
-
     xml += '</urlset>';
     res.type('application/xml').send(xml);
-  } catch {
-    res.type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[sitemap]', err);
+    res.status(500).type('application/xml').send('<?xml version="1.0"?><error/>');
   }
 });
 
@@ -70,15 +95,8 @@ if (fs.existsSync(publicPath)) {
   app.use(express.static(publicPath));
 }
 
-app.use('/admin', (req, res, next) => {
-  if (fs.existsSync(path.join(clientDistPath, 'index.html'))) {
-    res.sendFile(path.join(clientDistPath, 'index.html'));
-  } else {
-    next();
-  }
-});
-
-app.use((_req, res) => {
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
   const indexPath = path.join(clientDistPath, 'index.html');
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
@@ -87,8 +105,15 @@ app.use((_req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`[DownAir] Server running on http://localhost:${PORT}`);
-  console.log(`[DownAir] API available at http://localhost:${PORT}/api`);
-  console.log(`[DownAir] Setup: ${process.env.SETUP_COMPLETED === 'true' ? 'Completed' : 'Pending'}`);
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // eslint-disable-next-line no-console
+  console.error('[error]', err);
+  res.status(500).json({ success: false, error: 'Internal server error' });
+});
+
+app.listen(config.APP_PORT, () => {
+  // eslint-disable-next-line no-console
+  console.log(`[DownAir] Server running on http://localhost:${config.APP_PORT}`);
+  // eslint-disable-next-line no-console
+  console.log(`[DownAir] Setup: ${config.setupDone ? 'Completed' : 'Pending'}`);
 });

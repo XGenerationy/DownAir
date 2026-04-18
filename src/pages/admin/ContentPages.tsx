@@ -13,10 +13,8 @@ export default function AdminContent() {
   const [pages, setPages] = useState<ContentPageData[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const token = localStorage.getItem('admin_token') || '';
-
-  const loadPages = () => {
-    api.adminGetContent(token).then((res) => {
+const loadPages = () => {
+    api.adminGetContent().then((res) => {
       if (res.success && res.data) setPages(res.data);
     }).catch(() => {}).finally(() => setLoading(false));
   };
@@ -25,12 +23,12 @@ export default function AdminContent() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this page?')) return;
-    await api.adminDeleteContent(token, id);
+    await api.adminDeleteContent(id);
     loadPages();
   };
 
   const handleTogglePublish = async (page: ContentPageData) => {
-    await api.adminUpdateContent(token, page.id, { isPublished: !page.isPublished });
+    await api.adminUpdateContent(page.id, { isPublished: !page.isPublished });
     loadPages();
   };
 

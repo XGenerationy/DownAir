@@ -9,13 +9,11 @@ import type { DashboardData } from '@/lib/api';
 export default function AdminDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const token = localStorage.getItem('admin_token') || '';
-
-  useEffect(() => {
-    api.adminDashboard(token).then((res) => {
+useEffect(() => {
+    api.adminDashboard().then((res) => {
       if (res.success && res.data) setData(res.data);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, [token]);
+  }, []);
 
   if (loading) {
     return <div className="animate-pulse space-y-4"><div className="h-32 bg-slate-800 rounded-lg" /><div className="grid grid-cols-4 gap-4">{Array.from({length:4}).map((_,i)=><div key={i} className="h-24 bg-slate-800 rounded-lg" />)}</div></div>;

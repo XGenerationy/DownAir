@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { AdBanner, SmartLink } from '@/components/AdBanner';
 import { api } from '@/lib/api';
 import type { ContentPageData } from '@/lib/api';
+import { sanitizeHtml } from '@/lib/sanitize';
 
 export default function GuidePage() {
   const { slug } = useParams<{ slug: string }>();
@@ -112,7 +113,7 @@ export default function GuidePage() {
 
             <div
               className="prose-content"
-              dangerouslySetInnerHTML={{ __html: page.content }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(page.content) }}
             />
 
             <div className="mt-8">

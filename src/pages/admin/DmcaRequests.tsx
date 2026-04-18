@@ -10,16 +10,14 @@ import type { DmcaData } from '@/lib/api';
 export default function AdminDmca() {
   const [requests, setRequests] = useState<DmcaData[]>([]);
   const [loading, setLoading] = useState(true);
-  const token = localStorage.getItem('admin_token') || '';
-
-  useEffect(() => {
-    api.adminGetDmca(token).then((res) => {
+useEffect(() => {
+    api.adminGetDmca().then((res) => {
       if (res.success && res.data) setRequests(res.data);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, [token]);
+  }, []);
 
   const handleStatus = async (id: number, status: string) => {
-    await api.adminUpdateDmcaStatus(token, id, status);
+    await api.adminUpdateDmcaStatus(id, status);
     setRequests(requests.map((r) => r.id === id ? { ...r, status } : r));
   };
 
