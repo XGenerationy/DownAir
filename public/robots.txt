@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api
+Disallow: /setup
+
+Sitemap: https://downair.net/api/sitemap
