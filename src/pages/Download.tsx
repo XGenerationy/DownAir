@@ -38,20 +38,26 @@ export default function DownloadPage() {
     }
   }, [location.state, navigate]);
 
-  const handleDownload = useCallback(async () => {
+  const handleCreate = useCallback(async () => {
     if (!selectedFormat || !analysisData) return;
+    const sourceUrl = analysisData.analysis.url;
+    if (!sourceUrl) {
+      setError('Source URL is missing — please analyze the link again.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
       const res = await api.createDownload(
-        analysisData.analysis.formats[0] ? '' : '',
+        sourceUrl,
         selectedFormat.formatId,
-        selectedFormat.quality
+        selectedFormat.quality,
       );
       if (res.success && res.data) {
-        const url = api.getDownloadUrl(res.data.token);
-        setDownloadUrl(url);
+        setDownloadUrl(api.getDownloadUrl(res.data.token));
         setCountdown(5);
+      } else {
+        setError(res.error || 'Download failed');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Download failed');
@@ -60,36 +66,14 @@ export default function DownloadPage() {
     }
   }, [selectedFormat, analysisData]);
 
-  const handleCreate = async () => {
-    if (!selectedFormat || !analysisData) return;
-    setLoading(true);
-    setError('');
-    try {
-      const res = await api.createDownload(
-        '',
-        selectedFormat.formatId,
-        selectedFormat.quality
-      );
-      if (res.success && res.data) {
-        const url = api.getDownloadUrl(res.data.token);
-        setDownloadUrl(url);
-        setCountdown(5);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Download failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const startDownload = useCallback(() => {
-    if (downloadUrl) {
-      setDownloading(true);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.click();
-      setTimeout(() => setDownloading(false), 3000);
-    }
+    if (!downloadUrl) return;
+    setDownloading(true);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.rel = 'noopener noreferrer';
+    link.click();
+    setTimeout(() => setDownloading(false), 3000);
   }, [downloadUrl]);
 
   if (!analysisData) return null;
@@ -103,12 +87,6 @@ export default function DownloadPage() {
       <Helmet>
         <title>Download - {analysis.title} | DownAir</title>
         <meta name="description" content={`Download ${analysis.title} from ${analysis.platform} in multiple formats.`} />
-        <script type="application/ld+json">{JSON.stringify({
-          '@context': 'https://schema.org',
-          '@type': 'WebPage',
-          name: `Download ${analysis.title}`,
-          description: `Download ${analysis.title} from ${analysis.platform}`,
-        })}</script>
       </Helmet>
 
       <div className="max-w-4xl mx-auto px-4 py-8">
@@ -119,7 +97,6 @@ export default function DownloadPage() {
           <ArrowLeft className="w-4 h-4" /> Back to Home
         </button>
 
-        {/* Media Info */}
         <Card className="mb-8 overflow-hidden">
           <div className="flex flex-col sm:flex-row gap-4 p-6">
             {analysis.thumbnail && (
@@ -146,16 +123,12 @@ export default function DownloadPage() {
         </Card>
 
         {countdown !== null ? (
-          /* Countdown / Download */
           <Card className="p-8">
             <div className="flex flex-col items-center py-8">
               {countdown > 0 ? (
                 <>
                   <h2 className="text-2xl font-bold text-white mb-6">Preparing Your Download</h2>
-                  <Countdown
-                    seconds={countdown}
-                    onComplete={startDownload}
-                  />
+                  <Countdown seconds={countdown} onComplete={startDownload} />
                   <p className="text-slate-500 text-xs mt-4">Your download will start automatically</p>
                 </>
               ) : downloading ? (
@@ -179,7 +152,6 @@ export default function DownloadPage() {
             </div>
           </Card>
         ) : (
-          /* Format Selection */
           <>
             {videoFormats.length > 0 && (
               <div className="mb-8">
@@ -245,9 +217,7 @@ export default function DownloadPage() {
               </div>
             )}
 
-            {error && (
-              <p className="text-red-400 text-sm mb-4">{error}</p>
-            )}
+            {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
 
             <Button
               variant="cyan"

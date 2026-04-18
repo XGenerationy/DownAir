@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { api } from '@/lib/api';
-import type { ContentPageData } from '@/lib/api';
+import { sanitizeHtml } from '@/lib/sanitize';
 
 const CATEGORIES = [
   'Servers', 'Networking', 'Cybersecurity', 'Cloud Computing',
@@ -20,7 +20,6 @@ export default function ContentEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = !id || id === 'new';
-  const token = localStorage.getItem('admin_token') || '';
 
   const [form, setForm] = useState({
     slug: '',
@@ -33,10 +32,11 @@ export default function ContentEditor() {
   const [preview, setPreview] = useState(false);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!isNew && id) {
-      api.adminGetContentPage(token, parseInt(id)).then((res) => {
+      api.adminGetContentPage(parseInt(id, 10)).then((res) => {
         if (res.success && res.data) {
           const page = res.data;
           setForm({
@@ -48,23 +48,24 @@ export default function ContentEditor() {
             isPublished: page.isPublished,
           });
         }
-      }).catch(() => {}).finally(() => setLoading(false));
+      }).catch(() => setError('Failed to load page')).finally(() => setLoading(false));
     }
-  }, [id, isNew, token]);
+  }, [id, isNew]);
 
   const handleSave = async () => {
     setSaving(true);
+    setError('');
     try {
       if (isNew) {
-        const res = await api.adminCreateContent(token, form);
+        const res = await api.adminCreateContent(form);
         if (res.success && res.data) {
           navigate(`/admin/content/${res.data.id}/edit`);
         }
       } else if (id) {
-        await api.adminUpdateContent(token, parseInt(id), form);
+        await api.adminUpdateContent(parseInt(id, 10), form);
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Save failed');
+      setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -97,10 +98,12 @@ export default function ContentEditor() {
           </div>
         </div>
 
+        {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+
         {preview ? (
           <Card className="p-8">
             <h1 className="text-3xl font-bold text-white mb-4">{form.title}</h1>
-            <div className="prose-content" dangerouslySetInnerHTML={{ __html: form.content }} />
+            <div className="prose-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(form.content) }} />
           </Card>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -109,9 +112,7 @@ export default function ContentEditor() {
                 <Label>Title</Label>
                 <Input
                   value={form.title}
-                  onChange={(e) => {
-                    setForm({ ...form, title: e.target.value, slug: generateSlug(e.target.value) });
-                  }}
+                  onChange={(e) => setForm({ ...form, title: e.target.value, slug: generateSlug(e.target.value) })}
                   placeholder="Page title"
                 />
               </div>

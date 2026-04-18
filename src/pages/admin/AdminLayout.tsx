@@ -3,9 +3,10 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
   LayoutDashboard, FileText, Mail, Shield, Settings,
-  LogOut, Menu, X, ChevronDown, Download
+  LogOut, Menu, X, Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { api } from '@/lib/api';
 
 const sidebarLinks = [
   { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -17,27 +18,47 @@ const sidebarLinks = [
 
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authed, setAuthed] = useState<boolean | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem('admin_token');
-    if (!token) navigate('/admin/login');
+    let cancelled = false;
+    api.adminMe()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success) setAuthed(true);
+        else {
+          setAuthed(false);
+          navigate('/admin/login');
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAuthed(false);
+        navigate('/admin/login');
+      });
+    return () => { cancelled = true; };
   }, [navigate]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('admin_token');
-    localStorage.removeItem('admin_user');
+  const handleLogout = async () => {
+    try { await api.adminLogout(); } catch { /* ignore */ }
+    sessionStorage.removeItem('admin_user');
     navigate('/admin/login');
   };
 
   const adminUser = (() => {
     try {
-      return JSON.parse(localStorage.getItem('admin_user') || '{}');
+      return JSON.parse(sessionStorage.getItem('admin_user') || '{}');
     } catch {
       return {};
     }
   })();
+
+  if (authed === null) {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">Loading...</div>;
+  }
+  if (!authed) return null;
 
   return (
     <>
@@ -46,11 +67,10 @@ export function AdminLayout() {
       </Helmet>
 
       <div className="min-h-screen bg-slate-950 flex">
-        {/* Sidebar */}
         <aside
           className={cn(
             'fixed lg:static inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-700/50 transform transition-transform lg:transform-none',
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
           )}
         >
           <div className="flex flex-col h-full">
@@ -73,7 +93,7 @@ export function AdminLayout() {
                     'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
                     location.pathname === to
                       ? 'text-cyan-400 bg-cyan-500/10'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800',
                   )}
                 >
                   <Icon className="w-4 h-4" />
@@ -102,12 +122,10 @@ export function AdminLayout() {
           </div>
         </aside>
 
-        {/* Overlay */}
         {sidebarOpen && (
           <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
         )}
 
-        {/* Main */}
         <div className="flex-1 flex flex-col min-w-0">
           <header className="h-14 border-b border-slate-700/50 bg-slate-900/50 backdrop-blur-sm flex items-center px-4 gap-4">
             <button

@@ -10,16 +10,14 @@ import type { ContactData } from '@/lib/api';
 export default function AdminContacts() {
   const [contacts, setContacts] = useState<ContactData[]>([]);
   const [loading, setLoading] = useState(true);
-  const token = localStorage.getItem('admin_token') || '';
-
-  useEffect(() => {
-    api.adminGetContacts(token).then((res) => {
+useEffect(() => {
+    api.adminGetContacts().then((res) => {
       if (res.success && res.data) setContacts(res.data);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, [token]);
+  }, []);
 
   const handleMarkRead = async (id: number) => {
-    await api.adminMarkContactRead(token, id);
+    await api.adminMarkContactRead(id);
     setContacts(contacts.map((c) => c.id === id ? { ...c, isRead: true } : c));
   };
 
