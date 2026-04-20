@@ -104,6 +104,7 @@ function extractFormats(rawFormats: YtDlpFormat[]): FormatQuality[] {
     }
 
     if (!isAudioOnly && f.height) {
+      if (f.height > 1080) continue;
       const qualityLabel = `${f.height}p`;
       const key = `video_${f.height}_${f.ext}`;
       if (!seen.has(key)) {
@@ -176,7 +177,7 @@ export async function streamDownload(
     '--user-agent',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     '--get-url',
-    '-f', formatId === 'best' ? 'best[ext=mp4]/best' : formatId === 'best_audio' ? 'bestaudio/best' : formatId,
+    '-f', formatId === 'best' ? 'bestvideo[height<=1080][ext=mp4]+bestaudio/best[height<=1080]/best' : formatId === 'best_audio' ? 'bestaudio/best' : formatId,
     url,
   ], { timeout: 30000 });
 

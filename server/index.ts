@@ -30,7 +30,12 @@ app.use(
 );
 
 const corsOrigins = Array.from(
-  new Set([config.APP_URL, 'http://localhost:5173', 'http://localhost:3001'].filter(Boolean)),
+  new Set([
+    config.APP_URL,
+    config.APP_URL?.replace('https://', 'https://www.'),
+    'http://localhost:5173',
+    'http://localhost:3001',
+  ].filter(Boolean)),
 );
 app.use(
   cors({

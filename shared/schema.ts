@@ -20,7 +20,7 @@ export const downloads = pgTable('downloads', {
   thumbnail: text('thumbnail'),
   duration: integer('duration'),
   fileSize: text('file_size'),
-  token: varchar('token', { length: 255 }),
+  token: text('token'),
   ipAddress: varchar('ip_address', { length: 45 }),
   status: varchar('status', { length: 20 }).default('pending'),
   createdAt: timestamp('created_at').defaultNow(),
@@ -79,7 +79,7 @@ export const siteSettings = pgTable('site_settings', {
 
 export const downloadTokens = pgTable('download_tokens', {
   id: serial('id').primaryKey(),
-  token: varchar('token', { length: 255 }).notNull().unique(),
+  token: text('token').notNull().unique(),
   downloadId: integer('download_id').references(() => downloads.id),
   sourceUrl: text('source_url').notNull(),
   format: varchar('format', { length: 50 }),
