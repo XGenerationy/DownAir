@@ -79,7 +79,6 @@ export type AdminLoginRequest = {
 };
 
 export type AdminLoginResponse = {
-  token: string;
   admin: {
     id: number;
     email: string;

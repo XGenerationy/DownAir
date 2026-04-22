@@ -160,17 +160,6 @@ export async function streamDownload(
   formatId: string,
   outputPath?: string
 ): Promise<{ streamPath: string; mimeType: string; fileName: string }> {
-  const args = [
-    '--no-warnings',
-    '--no-check-certificates',
-    '--user-agent',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    '-f', formatId,
-    '--merge-output-format', 'mp4',
-    '-j',
-    url,
-  ];
-
   const { stdout } = await execFileAsync(YT_DLP_PATH, [
     '--no-warnings',
     '--no-check-certificates',

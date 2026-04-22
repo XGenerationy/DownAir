@@ -15,7 +15,7 @@ import { AUTH_COOKIE, authMiddleware, generateToken, getAuthCookieOptions } from
 import { loginLimiter } from '../middleware/rateLimit.js';
 import { sanitizeContent } from '../utils/sanitize.js';
 import { CONTENT_CATEGORIES } from '../../shared/types.js';
-import type { ApiResponse, DashboardStats, AdminLoginResponse } from '../../shared/types.js';
+import type { ApiResponse, DashboardStats } from '../../shared/types.js';
 
 const router = Router();
 
@@ -63,14 +63,12 @@ router.post('/login', loginLimiter, async (req, res) => {
     const token = generateToken({ id: admin.id, email: admin.email });
     res.cookie(AUTH_COOKIE, token, getAuthCookieOptions());
 
-    const response: ApiResponse<AdminLoginResponse> = {
+    res.json({
       success: true,
       data: {
-        token,
         admin: { id: admin.id, email: admin.email, name: admin.name || 'Admin' },
       },
-    };
-    res.json(response);
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ success: false, error: error.errors[0].message });

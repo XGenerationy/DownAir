@@ -23,13 +23,13 @@ const loadPages = () => {
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this page?')) return;
-    await api.adminDeleteContent(id);
-    loadPages();
+    const res = await api.adminDeleteContent(id);
+    if (res.success) loadPages();
   };
 
   const handleTogglePublish = async (page: ContentPageData) => {
-    await api.adminUpdateContent(page.id, { isPublished: !page.isPublished });
-    loadPages();
+    const res = await api.adminUpdateContent(page.id, { isPublished: !page.isPublished });
+    if (res.success) loadPages();
   };
 
   const filtered = pages.filter((p) =>

@@ -59,7 +59,7 @@ else
   chmod 600 /swapfile
   mkswap /swapfile >/dev/null
   swapon /swapfile
-  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
   sysctl vm.swappiness=10 >/dev/null 2>&1
   ok "2GB swap created."
 fi
@@ -111,27 +111,40 @@ else
 fi
 docker compose version &>/dev/null || fail "docker compose plugin not found."
 
-cat > /etc/docker/daemon.json <<'DJSON'
+if [ ! -f /etc/docker/daemon.json ]; then
+  cat > /etc/docker/daemon.json <<'DJSON'
 {
   "log-driver": "json-file",
   "log-opts": { "max-size": "10m", "max-file": "3" }
 }
 DJSON
-systemctl restart docker
-ok "Docker log rotation configured."
-docker system prune -af >/dev/null 2>&1 || true
+  systemctl restart docker
+  ok "Docker log rotation configured."
+else
+  ok "Docker daemon.json already exists, keeping it."
+fi
+if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/docker-compose.yml" ]; then
+  (cd "$INSTALL_DIR" && docker compose down --remove-orphans 2>/dev/null) || true
+fi
 
 # ── 7. Clone repository ──────────────────────────────────
 next_step "Cloning DownAir..."
 CLONE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
-[ -n "${GITHUB_TOKEN:-}" ] && CLONE_URL="https://${GITHUB_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.git"
+GIT_AUTH_OPTS=()
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  GIT_AUTH_OPTS=(-c "http.extraHeader=Authorization: Bearer ${GITHUB_TOKEN}")
+fi
 
 if [ -d "$INSTALL_DIR/.git" ]; then
-  cd "$INSTALL_DIR" && git pull --ff-only >/dev/null 2>&1
-  ok "Updated existing repo."
+  cd "$INSTALL_DIR"
+  if git "${GIT_AUTH_OPTS[@]}" pull --ff-only >/dev/null 2>&1; then
+    ok "Updated existing repo."
+  else
+    warn "git pull failed — continuing with existing code."
+  fi
 else
   rm -rf "$INSTALL_DIR"
-  git clone --depth 1 "$CLONE_URL" "$INSTALL_DIR" >/dev/null 2>&1
+  git "${GIT_AUTH_OPTS[@]}" clone --depth 1 "$CLONE_URL" "$INSTALL_DIR" >/dev/null 2>&1
   ok "Cloned to $INSTALL_DIR"
 fi
 cd "$INSTALL_DIR"
@@ -151,7 +164,7 @@ if [ ! -f .env ]; then
   sed -i "s|HMAC_SECRET=.*|HMAC_SECRET=$HMAC_SECRET|" .env
   sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$POSTGRES_PASSWORD|" .env
   sed -i "s|APP_URL=.*|APP_URL=https://$DOMAIN|" .env
-  sed -i "s|SETUP_COMPLETED=.*|SETUP_COMPLETED=true|" .env
+  sed -i "s|SETUP_COMPLETED=.*|SETUP_COMPLETED=false|" .env
 
   ok "All secrets generated."
 else
@@ -171,7 +184,11 @@ while [ $TRIES -lt 60 ]; do
   TRIES=$((TRIES + 1))
   sleep 2
 done
-[ $TRIES -ge 60 ] && warn "Database slow to start." || ok "Database ready."
+if [ $TRIES -ge 60 ]; then
+  warn "Database slow to start."
+else
+  ok "Database ready."
+fi
 
 echo "  Waiting for app..."
 TRIES=0
@@ -182,7 +199,11 @@ while [ $TRIES -lt 60 ]; do
   TRIES=$((TRIES + 1))
   sleep 3
 done
-[ $TRIES -ge 60 ] && warn "App slow to start." || ok "App ready."
+if [ $TRIES -ge 60 ]; then
+  warn "App slow to start."
+else
+  ok "App ready."
+fi
 
 echo "  Pushing database schema..."
 docker compose exec -T app npx drizzle-kit push 2>/dev/null || warn "Schema push needs attention."
@@ -263,7 +284,11 @@ echo ""
 sleep 2
 echo "  Health check:"
 CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3001/api/health 2>/dev/null || echo "000")
-[ "$CODE" != "000" ] && echo -e "    App: ${GREEN}HTTP $CODE${NC}" || echo -e "    App: ${YELLOW}starting...${NC}"
+if [ "$CODE" != "000" ]; then
+  echo -e "    App: ${GREEN}HTTP $CODE${NC}"
+else
+  echo -e "    App: ${YELLOW}starting...${NC}"
+fi
 
 echo ""
 echo "  URL:     https://$DOMAIN"

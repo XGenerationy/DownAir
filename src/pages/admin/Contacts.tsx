@@ -17,8 +17,10 @@ useEffect(() => {
   }, []);
 
   const handleMarkRead = async (id: number) => {
-    await api.adminMarkContactRead(id);
-    setContacts(contacts.map((c) => c.id === id ? { ...c, isRead: true } : c));
+    const res = await api.adminMarkContactRead(id);
+    if (res.success) {
+      setContacts((prev) => prev.map((c) => c.id === id ? { ...c, isRead: true } : c));
+    }
   };
 
   return (

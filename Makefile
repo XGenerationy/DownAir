@@ -1,4 +1,4 @@
-.PHONY: help up down logs status build restart deploy backup
+.PHONY: help up down logs logs-app status build restart deploy db-push db-seed db-seed-content backup
 
 SHELL := /bin/bash
 

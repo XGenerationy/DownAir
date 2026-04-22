@@ -27,7 +27,11 @@ const handleChangePassword = async (e: React.FormEvent) => {
     setLoading(true);
     setError('');
     try {
-      await api.adminChangePassword(currentPassword, newPassword);
+      const res = await api.adminChangePassword(currentPassword, newPassword);
+      if (!res.success) {
+        setError(res.error || 'Failed to change password');
+        return;
+      }
       setSuccess(true);
       setCurrentPassword('');
       setNewPassword('');

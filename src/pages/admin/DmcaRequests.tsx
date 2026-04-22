@@ -17,8 +17,10 @@ useEffect(() => {
   }, []);
 
   const handleStatus = async (id: number, status: string) => {
-    await api.adminUpdateDmcaStatus(id, status);
-    setRequests(requests.map((r) => r.id === id ? { ...r, status } : r));
+    const res = await api.adminUpdateDmcaStatus(id, status);
+    if (res.success) {
+      setRequests((prev) => prev.map((r) => r.id === id ? { ...r, status } : r));
+    }
   };
 
   const statusColors: Record<string, string> = {

@@ -174,7 +174,7 @@ export const api = {
     }),
 
   adminLogin: (email: string, password: string) =>
-    request<ApiResponse<{ token: string; admin: { id: number; email: string; name: string } }>>('/admin/login', {
+    request<ApiResponse<{ admin: { id: number; email: string; name: string } }>>('/admin/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),

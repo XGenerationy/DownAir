@@ -22,6 +22,7 @@ const setupSchema = z.object({
   dbName: z.string().regex(/^[a-zA-Z0-9_\-]+$/).min(1).max(63),
   dbUser: z.string().regex(/^[a-zA-Z0-9_\-]+$/).min(1).max(63),
   dbPassword: z.string().min(1).max(255),
+  dbSsl: z.boolean().optional().default(false),
   adminEmail: z.string().email().max(255),
   adminPassword: z.string().min(8).max(255),
   adminName: safeLine.min(1).max(255),
@@ -98,7 +99,7 @@ router.post('/complete', async (req, res) => {
       `NODE_ENV=production\n` +
       `\n` +
       `DATABASE_URL=${dbUrl}\n` +
-      `DB_SSL=false\n` +
+      `DB_SSL=${cfg.dbSsl ? 'true' : 'false'}\n` +
       `\n` +
       `JWT_SECRET=${secrets.jwtSecret}\n` +
       `ENCRYPTION_KEY=${secrets.encryptionKey}\n` +

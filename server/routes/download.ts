@@ -120,9 +120,6 @@ router.get('/proxy/:token', async (req, res) => {
     }
 
     const [tokenRecord] = claimed;
-    if (tokenRecord?.downloadId) {
-      await db.update(downloads).set({ status: 'completed' }).where(eq(downloads.id, tokenRecord.downloadId));
-    }
 
     const result = await streamDownload(tokenData.sourceUrl, tokenData.format);
 
@@ -136,18 +133,22 @@ router.get('/proxy/:token', async (req, res) => {
       return;
     }
 
-    res.setHeader('Content-Type', result.mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
-
-    const response = await fetch(safeUrl.toString(), {
+    const upstream = await fetch(safeUrl.toString(), {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
     });
-    if (!response.ok || !response.body) {
+    if (!upstream.ok || !upstream.body) {
       res.status(502).json({ success: false, error: 'Upstream fetch failed' });
       return;
     }
 
-    const reader = response.body.getReader();
+    if (tokenRecord?.downloadId) {
+      await db.update(downloads).set({ status: 'completed' }).where(eq(downloads.id, tokenRecord.downloadId));
+    }
+
+    res.setHeader('Content-Type', result.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+
+    const reader = upstream.body.getReader();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;

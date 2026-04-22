@@ -1,9 +1,6 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
-const requiredSecret = (name: string) =>
-  z.string({ required_error: `${name} must be set` }).min(32, `${name} must be ≥ 32 chars`);
-
 const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   APP_NAME: z.string().default('DownAir'),
@@ -63,4 +60,4 @@ export function refreshSecretsFromEnv(): void {
   config.setupDone = process.env.SETUP_COMPLETED === 'true';
 }
 
-requiredSecret;
+
