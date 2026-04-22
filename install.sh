@@ -74,18 +74,29 @@ ok "File descriptor limits raised."
 
 # ── 4. Firewall ───────────────────────────────────────────
 next_step "Configuring firewall..."
-ufw --force reset >/dev/null 2>&1 || true
-ufw default deny incoming >/dev/null
-ufw default allow outgoing >/dev/null
+if ufw status | grep -q "Status: active"; then
+  ok "UFW already active, ensuring required ports are open."
+else
+  ufw --force reset >/dev/null 2>&1 || true
+  ufw default deny incoming >/dev/null
+  ufw default allow outgoing >/dev/null
+fi
 ufw allow 22/tcp >/dev/null
 ufw allow 80/tcp >/dev/null
 ufw allow 443/tcp >/dev/null
 ufw --force enable >/dev/null
-ok "UFW: SSH (22), HTTP (80), HTTPS (443) only."
+ok "UFW: SSH (22), HTTP (80), HTTPS (443) open."
 
 # ── 5. fail2ban ───────────────────────────────────────────
 next_step "Configuring fail2ban..."
-cat > /etc/fail2ban/jail.local <<'F2B'
+if [ -f /etc/fail2ban/jail.local ] && grep -q '^\[sshd\]' /etc/fail2ban/jail.local; then
+  ok "fail2ban jail.local already has [sshd] config."
+else
+  if [ -f /etc/fail2ban/jail.local ]; then
+    cp /etc/fail2ban/jail.local /etc/fail2ban/jail.local.bak
+  fi
+  cat >> /etc/fail2ban/jail.local <<'F2B'
+
 [sshd]
 enabled  = true
 port     = ssh
@@ -95,8 +106,9 @@ maxretry = 5
 bantime  = 3600
 findtime = 600
 F2B
+  systemctl restart fail2ban
+fi
 systemctl enable fail2ban >/dev/null 2>&1
-systemctl restart fail2ban
 ok "5 failed SSH attempts = 1 hour ban."
 
 # ── 6. Docker ─────────────────────────────────────────────
@@ -137,14 +149,14 @@ fi
 
 if [ -d "$INSTALL_DIR/.git" ]; then
   cd "$INSTALL_DIR"
-  if git "${GIT_AUTH_OPTS[@]}" pull --ff-only >/dev/null 2>&1; then
+  if git ${GIT_AUTH_OPTS[@]+"${GIT_AUTH_OPTS[@]}"} pull --ff-only >/dev/null 2>&1; then
     ok "Updated existing repo."
   else
     warn "git pull failed — continuing with existing code."
   fi
 else
   rm -rf "$INSTALL_DIR"
-  git "${GIT_AUTH_OPTS[@]}" clone --depth 1 "$CLONE_URL" "$INSTALL_DIR" >/dev/null 2>&1
+  git ${GIT_AUTH_OPTS[@]+"${GIT_AUTH_OPTS[@]}"} clone --depth 1 "$CLONE_URL" "$INSTALL_DIR" >/dev/null 2>&1
   ok "Cloned to $INSTALL_DIR"
 fi
 cd "$INSTALL_DIR"
