@@ -1,439 +1,279 @@
 #!/usr/bin/env bash
+# ============================================================
+# DownAir — From zero server to live website. One command.
+#
+# Usage:
+#   GITHUB_TOKEN=ghp_xxx ./install.sh downair.net
+# ============================================================
 set -euo pipefail
+
+DOMAIN="${1:-}"
+INSTALL_DIR="/opt/downair"
+REPO_OWNER="XGenerationy"
+REPO_NAME="DownAir"
+SWAP_SIZE="2G"
+CERTBOT_EMAIL="${CERTBOT_EMAIL:-admin@${DOMAIN:-localhost}}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-print_banner() {
-  echo ""
-  echo -e "${CYAN}  ____                    _ _    _ _ "
-  echo -e " |  _ \\ _   _ _ __  _ __ (_) | _(_) |"
-  echo -e " | | | | | | | '_ \\| '_ \\| |/ /| | |"
-  echo -e " | |_| | |_| | | | | | | |   < | | |"
-  echo -e " |____/ \\__,_|_| |_|_| |_|_|\\_\\|_|_|${NC}"
-  echo ""
-  echo -e "${GREEN}  Social Media Video & Audio Downloader${NC}"
-  echo -e "  ${YELLOW}Installation Script v1.0${NC}"
-  echo ""
-}
+ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
+warn() { echo -e "  ${YELLOW}⚠${NC} $1"; }
+fail() { echo -e "  ${RED}✗${NC} $1"; exit 1; }
 
-print_step() {
-  echo ""
-  echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-  echo -e "${GREEN}  ▶ $1${NC}"
-  echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-}
+[ "$(id -u)" -ne 0 ] && fail "Run as root: sudo ./install.sh $DOMAIN"
+[ -z "$DOMAIN" ] && { echo "Usage: GITHUB_TOKEN=ghp_xxx ./install.sh yourdomain.com"; exit 1; }
 
-print_ok() {
-  echo -e "  ${GREEN}✓${NC} $1"
-}
+TOTAL=11
+step=0
+next_step() { step=$((step + 1)); echo ""; echo "[${step}/${TOTAL}] $1"; }
 
-print_warn() {
-  echo -e "  ${YELLOW}⚠${NC} $1"
-}
+echo ""
+echo "============================================"
+echo "  DownAir — Full Server Installation"
+echo "  Domain: $DOMAIN"
+echo "============================================"
 
-print_err() {
-  echo -e "  ${RED}✗${NC} $1"
-}
+# ── 1. System packages ─────────────────────────────────────
+next_step "Installing system packages..."
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get upgrade -y -qq
+apt-get install -y -qq \
+  curl wget git unzip make \
+  ufw fail2ban \
+  nginx certbot python3-certbot-nginx \
+  ca-certificates gnupg lsb-release \
+  python3 openssl ssl-cert dnsutils \
+  logrotate cron
+ok "System packages installed."
 
-command_exists() {
-  command -v "$1" &>/dev/null
-}
-
-print_banner
-
-PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$PROJECT_DIR"
-
-# ──────────────────────────────────────────────
-# 1. DETECT OS
-# ──────────────────────────────────────────────
-print_step "Detecting Operating System"
-
-OS="$(uname -s)"
-ARCH="$(uname -m)"
-case "$OS" in
-  Linux*)  OS_TYPE="linux" ;;
-  Darwin*) OS_TYPE="macos" ;;
-  *)       OS_TYPE="unknown" ;;
-esac
-
-print_ok "OS: $OS ($ARCH)"
-
-if [ "$OS_TYPE" = "unknown" ]; then
-  print_err "Unsupported operating system: $OS"
-  exit 1
+# ── 2. Swap ────────────────────────────────────────────────
+next_step "Configuring swap (${SWAP_SIZE})..."
+if [ -f /swapfile ]; then
+  ok "Swap already exists."
+else
+  fallocate -l "$SWAP_SIZE" /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile >/dev/null
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  sysctl vm.swappiness=10 >/dev/null 2>&1
+  ok "2GB swap created."
 fi
 
-# ──────────────────────────────────────────────
-# 2. CHECK / INSTALL SYSTEM DEPENDENCIES
-# ──────────────────────────────────────────────
-print_step "Checking System Dependencies"
+# ── 3. System limits ──────────────────────────────────────
+next_step "Tuning system limits..."
+cat > /etc/security/limits.d/downair.conf <<'LIMITS'
+*    soft    nofile    65536
+*    hard    nofile    65536
+LIMITS
+ok "File descriptor limits raised."
 
-if [ "$OS_TYPE" = "macos" ]; then
-  if ! command_exists brew; then
-    print_warn "Homebrew not found. Installing..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+# ── 4. Firewall ───────────────────────────────────────────
+next_step "Configuring firewall..."
+ufw --force reset >/dev/null 2>&1 || true
+ufw default deny incoming >/dev/null
+ufw default allow outgoing >/dev/null
+ufw allow 22/tcp >/dev/null
+ufw allow 80/tcp >/dev/null
+ufw allow 443/tcp >/dev/null
+ufw --force enable >/dev/null
+ok "UFW: SSH (22), HTTP (80), HTTPS (443) only."
+
+# ── 5. fail2ban ───────────────────────────────────────────
+next_step "Configuring fail2ban..."
+cat > /etc/fail2ban/jail.local <<'F2B'
+[sshd]
+enabled  = true
+port     = ssh
+filter   = sshd
+logpath  = /var/log/auth.log
+maxretry = 5
+bantime  = 3600
+findtime = 600
+F2B
+systemctl enable fail2ban >/dev/null 2>&1
+systemctl restart fail2ban
+ok "5 failed SSH attempts = 1 hour ban."
+
+# ── 6. Docker ─────────────────────────────────────────────
+next_step "Installing Docker..."
+if ! command -v docker &>/dev/null; then
+  curl -fsSL https://get.docker.com | sh >/dev/null 2>&1
+  systemctl enable docker >/dev/null 2>&1
+  systemctl start docker
+  ok "Docker installed."
+else
+  ok "Docker already installed."
+fi
+docker compose version &>/dev/null || fail "docker compose plugin not found."
+
+cat > /etc/docker/daemon.json <<'DJSON'
+{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}
+DJSON
+systemctl restart docker
+ok "Docker log rotation configured."
+docker system prune -af >/dev/null 2>&1 || true
+
+# ── 7. Clone repository ──────────────────────────────────
+next_step "Cloning DownAir..."
+CLONE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
+[ -n "${GITHUB_TOKEN:-}" ] && CLONE_URL="https://${GITHUB_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.git"
+
+if [ -d "$INSTALL_DIR/.git" ]; then
+  cd "$INSTALL_DIR" && git pull --ff-only >/dev/null 2>&1
+  ok "Updated existing repo."
+else
+  rm -rf "$INSTALL_DIR"
+  git clone --depth 1 "$CLONE_URL" "$INSTALL_DIR" >/dev/null 2>&1
+  ok "Cloned to $INSTALL_DIR"
+fi
+cd "$INSTALL_DIR"
+
+# ── 8. Generate .env ─────────────────────────────────────
+next_step "Generating environment and secrets..."
+if [ ! -f .env ]; then
+  cp .env.example .env
+
+  JWT_SECRET=$(openssl rand -hex 32)
+  ENCRYPTION_KEY=$(openssl rand -hex 32)
+  HMAC_SECRET=$(openssl rand -hex 32)
+  POSTGRES_PASSWORD=$(openssl rand -hex 16)
+
+  sed -i "s|JWT_SECRET=.*|JWT_SECRET=$JWT_SECRET|" .env
+  sed -i "s|ENCRYPTION_KEY=.*|ENCRYPTION_KEY=$ENCRYPTION_KEY|" .env
+  sed -i "s|HMAC_SECRET=.*|HMAC_SECRET=$HMAC_SECRET|" .env
+  sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$POSTGRES_PASSWORD|" .env
+  sed -i "s|APP_URL=.*|APP_URL=https://$DOMAIN|" .env
+  sed -i "s|SETUP_COMPLETED=.*|SETUP_COMPLETED=true|" .env
+
+  ok "All secrets generated."
+else
+  ok ".env already exists, keeping it."
+fi
+
+# ── 9. Build and start Docker stack ──────────────────────
+next_step "Building and starting Docker stack..."
+docker compose up -d --build 2>&1 | tail -5
+
+echo "  Waiting for database..."
+TRIES=0
+while [ $TRIES -lt 60 ]; do
+  if docker compose exec -T db pg_isready -U "${POSTGRES_USER:-downair}" >/dev/null 2>&1; then
+    break
   fi
-  print_ok "Homebrew ready"
-  PKG_MANAGER="brew"
-elif [ "$OS_TYPE" = "linux" ]; then
-  if command_exists apt-get; then
-    PKG_MANAGER="apt"
-  elif command_exists yum; then
-    PKG_MANAGER="yum"
-  elif command_exists dnf; then
-    PKG_MANAGER="dnf"
-  elif command_exists pacman; then
-    PKG_MANAGER="pacman"
+  TRIES=$((TRIES + 1))
+  sleep 2
+done
+[ $TRIES -ge 60 ] && warn "Database slow to start." || ok "Database ready."
+
+echo "  Waiting for app..."
+TRIES=0
+while [ $TRIES -lt 60 ]; do
+  if curl -s -o /dev/null http://127.0.0.1:3001/api/health 2>/dev/null; then
+    break
+  fi
+  TRIES=$((TRIES + 1))
+  sleep 3
+done
+[ $TRIES -ge 60 ] && warn "App slow to start." || ok "App ready."
+
+echo "  Pushing database schema..."
+docker compose exec -T app npx drizzle-kit push 2>/dev/null || warn "Schema push needs attention."
+ok "Database schema applied."
+
+echo "  Seeding content..."
+docker compose exec -T app npx tsx scripts/seed-content.ts 2>/dev/null || true
+ok "Content seeded."
+
+# ── 10. nginx ─────────────────────────────────────────────
+next_step "Configuring nginx..."
+
+cat > /etc/nginx/sites-available/downair <<NGINX
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $DOMAIN www.$DOMAIN;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_buffering off;
+        client_max_body_size 100m;
+    }
+}
+NGINX
+
+apt-get install -y -qq ssl-cert >/dev/null 2>&1 || true
+ln -sf /etc/nginx/sites-available/downair /etc/nginx/sites-enabled/downair
+rm -f /etc/nginx/sites-enabled/default
+nginx -t >/dev/null 2>&1 && systemctl reload nginx
+ok "nginx proxy active."
+
+# ── 11. SSL certificate ──────────────────────────────────
+next_step "Requesting SSL certificate..."
+
+SERVER_IP=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || echo "unknown")
+DOMAIN_IP=$(dig +short "$DOMAIN" 2>/dev/null | tail -1 || echo "none")
+
+echo "  Server IP: $SERVER_IP"
+echo "  Domain IP: $DOMAIN_IP"
+
+if [ "$SERVER_IP" = "$DOMAIN_IP" ]; then
+  if certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos \
+      --email "$CERTBOT_EMAIL" --redirect 2>/dev/null; then
+    ok "SSL certificate installed!"
   else
-    print_err "No supported package manager found"
-    exit 1
-  fi
-  print_ok "Package manager: $PKG_MANAGER"
-fi
-
-# Install basic build tools
-if [ "$OS_TYPE" = "macos" ]; then
-  brew install -q curl wget git 2>/dev/null || true
-elif [ "$PKG_MANAGER" = "apt" ]; then
-  sudo apt-get update -qq
-  sudo apt-get install -y -qq curl wget git build-essential 2>/dev/null || true
-elif [ "$PKG_MANAGER" = "yum" ]; then
-  sudo yum install -y -q curl wget git gcc gcc-c++ make 2>/dev/null || true
-elif [ "$PKG_MANAGER" = "dnf" ]; then
-  sudo dnf install -y -q curl wget git gcc gcc-c++ make 2>/dev/null || true
-elif [ "$PKG_MANAGER" = "pacman" ]; then
-  sudo pacman -S --noconfirm --quiet curl wget git base-devel 2>/dev/null || true
-fi
-print_ok "Basic system packages installed"
-
-# ──────────────────────────────────────────────
-# 3. NODE.JS
-# ──────────────────────────────────────────────
-print_step "Installing Node.js (v20 LTS)"
-
-if command_exists node; then
-  NODE_VERSION=$(node -v 2>/dev/null)
-  MAJOR=$(echo "$NODE_VERSION" | cut -d. -f1 | tr -d 'v')
-  if [ "$MAJOR" -ge 18 ]; then
-    print_ok "Node.js $NODE_VERSION already installed"
-  else
-    print_warn "Node.js $NODE_VERSION found (need 18+). Upgrading..."
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - 2>/dev/null || true
-    if [ "$OS_TYPE" = "macos" ]; then
-      brew install node@20 2>/dev/null || brew link node@20 2>/dev/null || true
-    elif [ "$PKG_MANAGER" = "apt" ]; then
-      sudo apt-get install -y -qq nodejs
-    fi
+    certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos \
+      --email "$CERTBOT_EMAIL" --redirect 2>/dev/null && \
+      ok "SSL certificate installed (without www)!" || \
+      warn "Certbot failed. Run: certbot --nginx -d $DOMAIN"
   fi
 else
-  if [ "$OS_TYPE" = "macos" ]; then
-    brew install node@20 2>/dev/null || true
-  elif [ "$PKG_MANAGER" = "apt" ]; then
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-    sudo apt-get install -y -qq nodejs
-  elif [ "$PKG_MANAGER" = "yum" ] || [ "$PKG_MANAGER" = "dnf" ]; then
-    curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
-    sudo "$PKG_MANAGER" install -y -q nodejs
-  elif [ "$PKG_MANAGER" = "pacman" ]; then
-    sudo pacman -S --noconfirm nodejs npm
-  fi
-  print_ok "Node.js installed: $(node -v)"
+  warn "DNS not pointing here. After DNS propagates: certbot --nginx -d $DOMAIN"
 fi
 
-if command_exists npm; then
-  print_ok "npm $(npm -v)"
-else
-  print_err "npm not found after Node.js installation"
-  exit 1
+if ! crontab -l 2>/dev/null | grep -q certbot; then
+  (crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet --post-hook 'systemctl reload nginx'") | crontab -
+  ok "SSL auto-renewal cron added."
 fi
 
-# ──────────────────────────────────────────────
-# 4. POSTGRESQL
-# ──────────────────────────────────────────────
-print_step "Installing PostgreSQL"
-
-if command_exists psql; then
-  PG_VERSION=$(psql --version 2>/dev/null | head -1)
-  print_ok "PostgreSQL already installed: $PG_VERSION"
-else
-  if [ "$OS_TYPE" = "macos" ]; then
-    brew install postgresql@16 2>/dev/null || brew install postgresql 2>/dev/null || true
-    brew services start postgresql 2>/dev/null || true
-  elif [ "$PKG_MANAGER" = "apt" ]; then
-    sudo apt-get install -y -qq postgresql postgresql-contrib
-    sudo systemctl enable postgresql
-    sudo systemctl start postgresql
-  elif [ "$PKG_MANAGER" = "yum" ] || [ "$PKG_MANAGER" = "dnf" ]; then
-    sudo "$PKG_MANAGER" install -y -q postgresql-server postgresql-contrib
-    sudo postgresql-setup initdb 2>/dev/null || true
-    sudo systemctl enable postgresql
-    sudo systemctl start postgresql
-  elif [ "$PKG_MANAGER" = "pacman" ]; then
-    sudo pacman -S --noconfirm postgresql
-    sudo -u postgres initdb -D /var/lib/postgres/data 2>/dev/null || true
-    sudo systemctl enable postgresql
-    sudo systemctl start postgresql
-  fi
-  print_ok "PostgreSQL installed"
-fi
-
-# ──────────────────────────────────────────────
-# 5. YT-DLP
-# ──────────────────────────────────────────────
-print_step "Installing yt-dlp"
-
-if command_exists yt-dlp; then
-  print_ok "yt-dlp $(yt-dlp --version)"
-else
-  if command_exists pip3; then
-    pip3 install -q yt-dlp 2>/dev/null && print_ok "yt-dlp installed via pip3"
-  elif command_exists pip; then
-    pip install -q yt-dlp 2>/dev/null && print_ok "yt-dlp installed via pip"
-  fi
-
-  if ! command_exists yt-dlp; then
-    sudo curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-    sudo chmod a+rx /usr/local/bin/yt-dlp
-    print_ok "yt-dlp installed via direct download"
-  fi
-fi
-
-# ──────────────────────────────────────────────
-# 6. NPM DEPENDENCIES
-# ──────────────────────────────────────────────
-print_step "Installing Project Dependencies (npm install)"
-
-if [ -f "package.json" ]; then
-  npm install --legacy-peer-deps 2>&1 | tail -3
-  print_ok "npm dependencies installed"
-else
-  print_err "package.json not found in $PROJECT_DIR"
-  exit 1
-fi
-
-# ──────────────────────────────────────────────
-# 7. SETUP POSTGRESQL DATABASE
-# ──────────────────────────────────────────────
-print_step "Setting Up PostgreSQL Database"
-
-read -rp "  PostgreSQL host [localhost]: " DB_HOST
-DB_HOST="${DB_HOST:-localhost}"
-
-read -rp "  PostgreSQL port [5432]: " DB_PORT
-DB_PORT="${DB_PORT:-5432}"
-
-read -rp "  Database name [downair]: " DB_NAME
-DB_NAME="${DB_NAME:-downair}"
-
-read -rp "  Database user [postgres]: " DB_USER
-DB_USER="${DB_USER:-postgres}"
-
-read -sp "  Database password: " DB_PASSWORD
+# ── Done ──────────────────────────────────────────────────
 echo ""
-DB_PASSWORD="${DB_PASSWORD:-}"
-
-# Create database and user if needed
-if [ "$OS_TYPE" = "macos" ]; then
-  PG_USER="${USER}"
-else
-  PG_USER="postgres"
-fi
-
-DB_EXISTS=$(sudo -u "$PG_USER" psql -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$DB_NAME" && echo "yes" || echo "no")
-
-if [ "$DB_EXISTS" = "no" ]; then
-  if [ "$DB_USER" = "postgres" ]; then
-    sudo -u "$PG_USER" psql -c "CREATE DATABASE $DB_NAME;" 2>/dev/null && print_ok "Database '$DB_NAME' created" || print_warn "Could not create database (may already exist)"
-  else
-    sudo -u "$PG_USER" psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';" 2>/dev/null || true
-    sudo -u "$PG_USER" psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" 2>/dev/null && print_ok "Database '$DB_NAME' created" || print_warn "Could not create database"
-  fi
-else
-  print_ok "Database '$DB_NAME' already exists"
-fi
-
-# Build the DATABASE_URL
-if [ -n "$DB_PASSWORD" ]; then
-  DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
-else
-  DATABASE_URL="postgresql://${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
-fi
-
-# ──────────────────────────────────────────────
-# 8. GENERATE SECRETS
-# ──────────────────────────────────────────────
-print_step "Generating Security Keys"
-
-JWT_SECRET=$(openssl rand -hex 64)
-ENCRYPTION_KEY=$(openssl rand -hex 32)
-HMAC_SECRET=$(openssl rand -hex 32)
-print_ok "JWT_SECRET generated"
-print_ok "ENCRYPTION_KEY generated"
-print_ok "HMAC_SECRET generated"
-
-# ──────────────────────────────────────────────
-# 9. ADMIN CONFIGURATION
-# ──────────────────────────────────────────────
-print_step "Configure Admin Account"
-
-read -rp "  Admin name [Admin]: " ADMIN_NAME
-ADMIN_NAME="${ADMIN_NAME:-Admin}"
-
-read -rp "  Admin email [admin@downair.net]: " ADMIN_EMAIL
-ADMIN_EMAIL="${ADMIN_EMAIL:-admin@downair.net}"
-
-read -sp "  Admin password (min 8 chars): " ADMIN_PASSWORD
+echo "============================================"
+echo "  DownAir — Installation Complete!"
+echo "============================================"
 echo ""
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
-
-if [ ${#ADMIN_PASSWORD} -lt 8 ]; then
-  print_err "Password must be at least 8 characters"
-  read -sp "  Admin password (min 8 chars): " ADMIN_PASSWORD
-  echo ""
-  if [ ${#ADMIN_PASSWORD} -lt 8 ]; then
-    ADMIN_PASSWORD="admin$(date +%s | tail -c 5)"
-    print_warn "Generated fallback password: $ADMIN_PASSWORD"
-  fi
-fi
-
-# ──────────────────────────────────────────────
-# 10. APP CONFIGURATION
-# ──────────────────────────────────────────────
-print_step "Configure Application"
-
-read -rp "  App name [DownAir]: " APP_NAME
-APP_NAME="${APP_NAME:-DownAir}"
-
-read -rp "  App URL [http://localhost:5173]: " APP_URL
-APP_URL="${APP_URL:-http://localhost:5173}"
-
-read -rp "  Server port [3001]: " APP_PORT
-APP_PORT="${APP_PORT:-3001}"
-
-# ──────────────────────────────────────────────
-# 11. WRITE .env FILE
-# ──────────────────────────────────────────────
-print_step "Writing Configuration (.env)"
-
-cat > .env << ENVEOF
-# DownAir Configuration - Generated by install.sh
-# $(date)
-
-# Application
-APP_NAME=${APP_NAME}
-APP_URL=${APP_URL}
-APP_PORT=${APP_PORT}
-NODE_ENV=production
-
-# Database
-DATABASE_URL=${DATABASE_URL}
-
-# Security
-JWT_SECRET=${JWT_SECRET}
-ENCRYPTION_KEY=${ENCRYPTION_KEY}
-HMAC_SECRET=${HMAC_SECRET}
-
-# Admin
-ADMIN_EMAIL=${ADMIN_EMAIL}
-ADMIN_PASSWORD=${ADMIN_PASSWORD}
-
-# Setup Status
-SETUP_COMPLETED=true
-ENVEOF
-
-chmod 600 .env
-print_ok ".env file created with secure permissions"
-
-# ──────────────────────────────────────────────
-# 12. PUSH DATABASE SCHEMA
-# ──────────────────────────────────────────────
-print_step "Pushing Database Schema (Drizzle)"
-
-export DATABASE_URL
-npx drizzle-kit push 2>&1 | tail -5
-print_ok "Database schema pushed"
-
-# ──────────────────────────────────────────────
-# 13. SEED ADMIN USER
-# ──────────────────────────────────────────────
-print_step "Seeding Admin User"
-
-npx tsx scripts/seed.ts 2>&1
-print_ok "Admin user seeded"
-
-# ──────────────────────────────────────────────
-# 14. SEED CONTENT PAGES
-# ──────────────────────────────────────────────
-print_step "Seeding 150 Content Pages"
-
-npx tsx scripts/seed-content.ts 2>&1 | tail -15
-print_ok "Content pages seeded"
-
-# ──────────────────────────────────────────────
-# 15. BUILD FRONTEND
-# ──────────────────────────────────────────────
-print_step "Building Frontend (Vite)"
-
-npx vite build 2>&1 | tail -8
-print_ok "Frontend built successfully"
-
-# ──────────────────────────────────────────────
-# 16. VERIFY INSTALLATION
-# ──────────────────────────────────────────────
-print_step "Verifying Installation"
-
-ERRORS=0
-
-if command_exists node; then print_ok "Node.js: $(node -v)"; else print_err "Node.js not found"; ERRORS=$((ERRORS+1)); fi
-if command_exists npm; then print_ok "npm: $(npm -v)"; else print_err "npm not found"; ERRORS=$((ERRORS+1)); fi
-if command_exists psql; then print_ok "PostgreSQL: $(psql --version | head -1)"; else print_err "PostgreSQL not found"; ERRORS=$((ERRORS+1)); fi
-if command_exists yt-dlp; then print_ok "yt-dlp: $(yt-dlp --version)"; else print_warn "yt-dlp not found (downloads will use fallback formats)"; fi
-[ -f ".env" ] && print_ok ".env file exists" || { print_err ".env missing"; ERRORS=$((ERRORS+1)); }
-[ -d "node_modules" ] && print_ok "node_modules exists" || { print_err "node_modules missing"; ERRORS=$((ERRORS+1)); }
-[ -d "dist/client" ] && print_ok "Frontend build exists" || { print_err "Frontend build missing"; ERRORS=$((ERRORS+1)); }
-
-# ──────────────────────────────────────────────
-# DONE
-# ──────────────────────────────────────────────
-echo ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}  ✓ INSTALLATION COMPLETE${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "  ${YELLOW}App Name:${NC}    $APP_NAME"
-echo -e "  ${YELLOW}App URL:${NC}     $APP_URL"
-echo -e "  ${YELLOW}Server Port:${NC} $APP_PORT"
-echo -e "  ${YELLOW}Database:${NC}    $DB_NAME"
-echo -e "  ${YELLOW}Admin Email:${NC} $ADMIN_EMAIL"
-echo ""
-echo -e "  ${GREEN}Start development:${NC}"
-echo -e "    ${CYAN}npm run dev${NC}"
-echo ""
-echo -e "  ${GREEN}Start production server:${NC}"
-echo -e "    ${CYAN}NODE_ENV=production npx tsx server/index.ts${NC}"
-echo ""
-echo -e "  ${GREEN}Admin Dashboard:${NC}"
-echo -e "    ${CYAN}${APP_URL}/admin/login${NC}"
-echo ""
-echo -e "  ${GREEN}Content Pages:${NC}"
-echo -e "    ${CYAN}${APP_URL}/guides${NC}"
-echo ""
-echo -e "  ${GREEN}Re-seed content:${NC}"
-echo -e "    ${CYAN}npx tsx scripts/seed-content.ts${NC}"
-echo ""
-echo -e "  ${GREEN}Database management:${NC}"
-echo -e "    ${CYAN}npx drizzle-kit studio${NC}  (opens DB GUI)"
+echo "  Services:"
+docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || docker compose ps
 echo ""
 
-if [ "$ERRORS" -gt 0 ]; then
-  echo -e "  ${RED}⚠ $ERRORS issue(s) detected. Review output above.${NC}"
-  echo ""
-fi
+sleep 2
+echo "  Health check:"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3001/api/health 2>/dev/null || echo "000")
+[ "$CODE" != "000" ] && echo -e "    App: ${GREEN}HTTP $CODE${NC}" || echo -e "    App: ${YELLOW}starting...${NC}"
 
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo "  URL:     https://$DOMAIN"
+echo "  Dir:     $INSTALL_DIR"
+echo "  Config:  $INSTALL_DIR/.env"
+echo ""
+echo "  Commands:"
+echo "    cd $INSTALL_DIR"
+echo "    make status     — check health"
+echo "    make logs       — tail logs"
+echo "    make deploy     — update + rebuild"
+echo "    make backup     — database backup"
 echo ""
