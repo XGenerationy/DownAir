@@ -15,9 +15,9 @@ import {
 import { AUTH_COOKIE, authMiddleware, generateToken, getAuthCookieOptions } from '../middleware/auth.js';
 import { loginLimiter } from '../middleware/rateLimit.js';
 import { sanitizeContent } from '../utils/sanitize.js';
-import { ADS_CONFIG_KEY, CONTENT_CATEGORIES } from '../../shared/types.js';
+import { ADS_CONFIG_KEY, CONTENT_CATEGORIES, DEFAULT_ADS_CONFIG } from '../../shared/types.js';
 import type { ApiResponse, DashboardStats } from '../../shared/types.js';
-import { adsConfigSchema, readAdsConfig } from './ads.js';
+import { adsConfigSchema } from './ads.js';
 
 const router = Router();
 
@@ -273,8 +273,27 @@ router.put('/dmca/:id/status', authMiddleware, async (req, res) => {
 
 router.get('/ads-config', authMiddleware, async (_req, res) => {
   try {
-    const cfg = await readAdsConfig();
-    res.json({ success: true, data: cfg });
+    const db = getDb();
+    const [row] = await db
+      .select({ value: siteSettings.value })
+      .from(siteSettings)
+      .where(eq(siteSettings.key, ADS_CONFIG_KEY))
+      .limit(1);
+
+    if (!row?.value) {
+      res.json({ success: true, data: DEFAULT_ADS_CONFIG });
+      return;
+    }
+
+    const parsed = adsConfigSchema.safeParse(JSON.parse(row.value));
+    if (!parsed.success) {
+      // eslint-disable-next-line no-console
+      console.error('[admin/ads-config:get] invalid stored config', parsed.error);
+      res.status(500).json({ success: false, error: 'Stored ads config is invalid; refusing to return fallback so it is not overwritten' });
+      return;
+    }
+
+    res.json({ success: true, data: parsed.data });
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[admin/ads-config:get]', error);

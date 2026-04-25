@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { CheckCircle, Megaphone, AlertTriangle } from 'lucide-react';
+import { CheckCircle, Megaphone, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,23 +34,35 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 export default function AdminAds() {
   const { refresh } = useAdsConfig();
   const [cfg, setCfg] = useState<AdsConfig>(DEFAULT_ADS_CONFIG);
+  const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    api.adminGetAdsConfig()
-      .then((res) => {
-        if (cancelled) return;
-        if (res.success && res.data) setCfg(res.data);
-      })
-      .catch(() => { /* keep defaults */ })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+  const loadConfig = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const res = await api.adminGetAdsConfig();
+      if (res.success && res.data) {
+        setCfg(res.data);
+        setLoaded(true);
+      } else {
+        setLoadError(res.error || 'Failed to load ads configuration');
+      }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to load ads configuration');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
 
   useEffect(() => {
     return () => {
@@ -60,6 +72,7 @@ export default function AdminAds() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!loaded) return;
     setSaving(true);
     setError('');
     setSuccess(false);
@@ -82,6 +95,32 @@ export default function AdminAds() {
 
   if (loading) {
     return <div className="text-slate-400">Loading...</div>;
+  }
+
+  if (loadError) {
+    return (
+      <>
+        <Helmet><title>Ads - DownAir Admin</title></Helmet>
+        <div className="max-w-3xl">
+          <h1 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+            <Megaphone className="w-6 h-6" /> Ads Manager
+          </h1>
+          <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-300 text-sm">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium mb-1">Couldn't load the current ads configuration</p>
+              <p className="mb-3 text-red-200/80">{loadError}</p>
+              <p className="text-xs text-red-200/60 mb-3">
+                Editing has been disabled to prevent overwriting your saved configuration.
+              </p>
+              <Button variant="cyan" type="button" onClick={loadConfig}>
+                <RefreshCw className="w-4 h-4 mr-2" /> Retry
+              </Button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
   }
 
   return (
@@ -242,7 +281,7 @@ export default function AdminAds() {
             </div>
           )}
 
-          <Button variant="cyan" type="submit" disabled={saving}>
+          <Button variant="cyan" type="submit" disabled={saving || !loaded}>
             {saving ? 'Saving...' : 'Save Changes'}
           </Button>
         </form>
