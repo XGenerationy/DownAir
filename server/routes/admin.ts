@@ -10,12 +10,14 @@ import {
   dmcaRequests,
   downloads,
   activityLog,
+  siteSettings,
 } from '../../shared/schema.js';
 import { AUTH_COOKIE, authMiddleware, generateToken, getAuthCookieOptions } from '../middleware/auth.js';
 import { loginLimiter } from '../middleware/rateLimit.js';
 import { sanitizeContent } from '../utils/sanitize.js';
-import { CONTENT_CATEGORIES } from '../../shared/types.js';
+import { ADS_CONFIG_KEY, CONTENT_CATEGORIES } from '../../shared/types.js';
 import type { ApiResponse, DashboardStats } from '../../shared/types.js';
+import { adsConfigSchema, readAdsConfig } from './ads.js';
 
 const router = Router();
 
@@ -266,6 +268,44 @@ router.put('/dmca/:id/status', authMiddleware, async (req, res) => {
       return;
     }
     res.status(500).json({ success: false, error: 'Failed to update' });
+  }
+});
+
+router.get('/ads-config', authMiddleware, async (_req, res) => {
+  const cfg = await readAdsConfig();
+  res.json({ success: true, data: cfg });
+});
+
+router.put('/ads-config', authMiddleware, async (req, res) => {
+  try {
+    const cfg = adsConfigSchema.parse(req.body);
+    const db = getDb();
+    const value = JSON.stringify(cfg);
+
+    const [existing] = await db
+      .select()
+      .from(siteSettings)
+      .where(eq(siteSettings.key, ADS_CONFIG_KEY))
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(siteSettings)
+        .set({ value, updatedAt: new Date() })
+        .where(eq(siteSettings.key, ADS_CONFIG_KEY));
+    } else {
+      await db.insert(siteSettings).values({ key: ADS_CONFIG_KEY, value });
+    }
+
+    res.json({ success: true, data: cfg });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: error.errors[0].message });
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.error('[admin/ads-config]', error);
+    res.status(500).json({ success: false, error: 'Failed to save ads config' });
   }
 });
 

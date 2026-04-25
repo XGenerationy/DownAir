@@ -1,3 +1,5 @@
+import type { AdsConfig } from '../../shared/types';
+
 const API_BASE = '/api';
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -222,5 +224,15 @@ export const api = {
     request<ApiResponse>('/admin/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+
+  getAdsConfig: () => request<ApiResponse<AdsConfig>>('/ads/config'),
+
+  adminGetAdsConfig: () => request<ApiResponse<AdsConfig>>('/admin/ads-config'),
+
+  adminUpdateAdsConfig: (config: AdsConfig) =>
+    request<ApiResponse<AdsConfig>>('/admin/ads-config', {
+      method: 'PUT',
+      body: JSON.stringify(config),
     }),
 };
