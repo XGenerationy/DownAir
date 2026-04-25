@@ -272,8 +272,14 @@ router.put('/dmca/:id/status', authMiddleware, async (req, res) => {
 });
 
 router.get('/ads-config', authMiddleware, async (_req, res) => {
-  const cfg = await readAdsConfig();
-  res.json({ success: true, data: cfg });
+  try {
+    const cfg = await readAdsConfig();
+    res.json({ success: true, data: cfg });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[admin/ads-config:get]', error);
+    res.status(500).json({ success: false, error: 'Failed to load ads config' });
+  }
 });
 
 router.put('/ads-config', authMiddleware, async (req, res) => {

@@ -13,19 +13,19 @@ import { DEFAULT_ADS_CONFIG, type AdsConfig } from '../../../shared/types';
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <label className="flex items-center gap-3 cursor-pointer select-none">
+      <input
+        type="checkbox"
+        className="peer sr-only"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       <span
-        className={`relative inline-block w-10 h-6 rounded-full transition-colors ${checked ? 'bg-cyan-500' : 'bg-slate-700'}`}
+        className={`relative inline-block w-10 h-6 rounded-full transition-colors ring-offset-2 ring-offset-slate-900 peer-focus-visible:ring-2 peer-focus-visible:ring-cyan-400 ${checked ? 'bg-cyan-500' : 'bg-slate-700'}`}
       >
         <span
           className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-4' : ''}`}
         />
       </span>
-      <input
-        type="checkbox"
-        className="sr-only"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
       <span className="text-sm text-slate-300">{label}</span>
     </label>
   );
@@ -121,8 +121,9 @@ export default function AdminAds() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Head HTML (injected into &lt;head&gt;)</Label>
+                <Label htmlFor="ads-head-html">Head HTML (injected into &lt;head&gt;)</Label>
                 <Textarea
+                  id="ads-head-html"
                   rows={5}
                   value={cfg.headHtml}
                   onChange={(e) => setCfg({ ...cfg, headHtml: e.target.value })}
@@ -131,8 +132,9 @@ export default function AdminAds() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Body HTML (injected at end of &lt;body&gt;)</Label>
+                <Label htmlFor="ads-body-html">Body HTML (injected at end of &lt;body&gt;)</Label>
                 <Textarea
+                  id="ads-body-html"
                   rows={5}
                   value={cfg.bodyHtml}
                   onChange={(e) => setCfg({ ...cfg, bodyHtml: e.target.value })}
@@ -157,8 +159,9 @@ export default function AdminAds() {
                 label="Show sidebar ads"
               />
               <div className="space-y-2">
-                <Label>Sidebar HTML snippet</Label>
+                <Label htmlFor="ads-sidebar-html">Sidebar HTML snippet</Label>
                 <Textarea
+                  id="ads-sidebar-html"
                   rows={6}
                   value={cfg.slots.sidebar.html}
                   onChange={(e) => setCfg({
@@ -186,8 +189,9 @@ export default function AdminAds() {
                 label="Show banner ads"
               />
               <div className="space-y-2">
-                <Label>Banner HTML snippet</Label>
+                <Label htmlFor="ads-banner-html">Banner HTML snippet</Label>
                 <Textarea
+                  id="ads-banner-html"
                   rows={6}
                   value={cfg.slots.banner.html}
                   onChange={(e) => setCfg({
@@ -212,8 +216,9 @@ export default function AdminAds() {
                 label="Enable monetized links in nav/footer"
               />
               <div className="space-y-2">
-                <Label>Smart Link URL</Label>
+                <Label htmlFor="ads-smartlink-url">Smart Link URL</Label>
                 <Input
+                  id="ads-smartlink-url"
                   type="url"
                   value={cfg.smartLink.url}
                   onChange={(e) => setCfg({ ...cfg, smartLink: { ...cfg.smartLink, url: e.target.value } })}
