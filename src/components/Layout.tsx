@@ -3,6 +3,7 @@ import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 import { AntiAdblock } from './AntiAdblock';
 import { AdBanner } from './AdBanner';
+import { GlobalAdScripts } from './GlobalAdScripts';
 import { useAdsConfig } from '@/lib/adsContext';
 
 export function Layout() {
@@ -12,16 +13,10 @@ export function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950">
+      <GlobalAdScripts />
       <AntiAdblock />
       <Navbar />
       <div className="flex-1 flex">
-        {showSidebar && (
-          <aside className="hidden xl:block w-[180px] shrink-0 p-4">
-            <div className="sticky top-20 flex flex-col items-center gap-4">
-              <AdBanner type="sidebar" />
-            </div>
-          </aside>
-        )}
         <main className="flex-1 min-w-0">
           <Outlet />
         </main>
@@ -35,8 +30,7 @@ export function Layout() {
       </div>
       {showBanner && (
         <div className="max-w-7xl mx-auto w-full px-4 py-6">
-          <div className="flex justify-center gap-6">
-            <AdBanner type="banner" />
+          <div className="flex justify-center">
             <AdBanner type="banner" />
           </div>
         </div>

@@ -282,20 +282,13 @@ router.put('/ads-config', authMiddleware, async (req, res) => {
     const db = getDb();
     const value = JSON.stringify(cfg);
 
-    const [existing] = await db
-      .select()
-      .from(siteSettings)
-      .where(eq(siteSettings.key, ADS_CONFIG_KEY))
-      .limit(1);
-
-    if (existing) {
-      await db
-        .update(siteSettings)
-        .set({ value, updatedAt: new Date() })
-        .where(eq(siteSettings.key, ADS_CONFIG_KEY));
-    } else {
-      await db.insert(siteSettings).values({ key: ADS_CONFIG_KEY, value });
-    }
+    await db
+      .insert(siteSettings)
+      .values({ key: ADS_CONFIG_KEY, value })
+      .onConflictDoUpdate({
+        target: siteSettings.key,
+        set: { value, updatedAt: new Date() },
+      });
 
     res.json({ success: true, data: cfg });
   } catch (error) {

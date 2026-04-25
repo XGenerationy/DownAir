@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api } from './api';
 import { DEFAULT_ADS_CONFIG, type AdsConfig } from '../../shared/types';
 
@@ -18,7 +18,7 @@ export function AdsConfigProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<AdsConfig>(DEFAULT_ADS_CONFIG);
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       const res = await api.getAdsConfig();
       if (res.success && res.data) setConfig(res.data);
@@ -27,11 +27,11 @@ export function AdsConfigProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [refresh]);
 
   return (
     <AdsContext.Provider value={{ config, loading, refresh }}>{children}</AdsContext.Provider>

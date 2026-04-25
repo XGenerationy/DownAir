@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AdsConfigProvider } from '@/lib/adsContext';
-import { GlobalAdScripts } from '@/components/GlobalAdScripts';
 import { Layout } from '@/components/Layout';
 import { AdminLayout } from '@/pages/admin/AdminLayout';
 import Home from '@/pages/Home';
@@ -25,7 +24,6 @@ export default function App() {
   return (
     <HelmetProvider>
       <AdsConfigProvider>
-        <GlobalAdScripts />
         <BrowserRouter>
           <Routes>
             <Route path="/setup" element={<SetupWizard />} />
