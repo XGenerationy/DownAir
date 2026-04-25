@@ -13,6 +13,7 @@ import dmcaRouter from './routes/dmca.js';
 import adminRouter from './routes/admin.js';
 import guidesRouter from './routes/guides.js';
 import setupRouter from './routes/setup.js';
+import adsRouter from './routes/ads.js';
 import { apiLimiter } from './middleware/rateLimit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -62,6 +63,7 @@ app.use('/api/contact', contactRouter);
 app.use('/api/dmca', dmcaRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/guides', guidesRouter);
+app.use('/api/ads', adsRouter);
 
 app.get('/api/sitemap', async (_req, res) => {
   try {

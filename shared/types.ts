@@ -106,3 +106,40 @@ export const CONTENT_CATEGORIES: ContentPageCategory[] = [
   'AI & Machine Learning', 'Databases', 'Linux', 'Web Development',
   'DevOps', 'Mobile Development', 'Health Tech', 'Hardware', 'Data Science',
 ];
+
+export type AdSlotConfig = {
+  enabled: boolean;
+  html: string;
+};
+
+export type AdsConfig = {
+  enabled: boolean;
+  antiAdblockEnabled: boolean;
+  headHtml: string;
+  bodyHtml: string;
+  slots: {
+    sidebar: AdSlotConfig;
+    banner: AdSlotConfig;
+  };
+  smartLink: {
+    enabled: boolean;
+    url: string;
+  };
+};
+
+export const ADS_CONFIG_KEY = 'ads_config';
+
+export const DEFAULT_ADS_CONFIG: AdsConfig = {
+  enabled: false,
+  antiAdblockEnabled: false,
+  headHtml: '',
+  bodyHtml: '',
+  slots: {
+    sidebar: { enabled: false, html: '' },
+    banner: { enabled: false, html: '' },
+  },
+  smartLink: {
+    enabled: false,
+    url: '',
+  },
+};

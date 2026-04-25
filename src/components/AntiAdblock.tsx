@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Shield, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAdsConfig } from '@/lib/adsContext';
 
 export function AntiAdblock() {
+  const { config } = useAdsConfig();
   const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
+    if (!config.enabled || !config.antiAdblockEnabled) return;
     const detectAdblock = async () => {
       try {
         const testAd = document.createElement('div');
@@ -42,8 +45,9 @@ export function AntiAdblock() {
 
     const timer = setTimeout(detectAdblock, 2000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [config.enabled, config.antiAdblockEnabled]);
 
+  if (!config.enabled || !config.antiAdblockEnabled) return null;
   if (!blocked) return null;
 
   return (

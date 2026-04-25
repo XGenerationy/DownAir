@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import {
   LayoutDashboard, FileText, Mail, Shield, Settings,
-  LogOut, Menu, X, Download,
+  LogOut, Menu, X, Download, Megaphone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
@@ -13,6 +13,7 @@ const sidebarLinks = [
   { to: '/admin/content', label: 'Content Pages', icon: FileText },
   { to: '/admin/contacts', label: 'Contact Messages', icon: Mail },
   { to: '/admin/dmca-requests', label: 'DMCA Requests', icon: Shield },
+  { to: '/admin/ads', label: 'Ads Manager', icon: Megaphone },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 

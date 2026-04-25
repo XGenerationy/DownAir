@@ -10,12 +10,14 @@ import {
   dmcaRequests,
   downloads,
   activityLog,
+  siteSettings,
 } from '../../shared/schema.js';
 import { AUTH_COOKIE, authMiddleware, generateToken, getAuthCookieOptions } from '../middleware/auth.js';
 import { loginLimiter } from '../middleware/rateLimit.js';
 import { sanitizeContent } from '../utils/sanitize.js';
-import { CONTENT_CATEGORIES } from '../../shared/types.js';
+import { ADS_CONFIG_KEY, CONTENT_CATEGORIES, DEFAULT_ADS_CONFIG } from '../../shared/types.js';
 import type { ApiResponse, DashboardStats } from '../../shared/types.js';
+import { adsConfigSchema } from './ads.js';
 
 const router = Router();
 
@@ -266,6 +268,62 @@ router.put('/dmca/:id/status', authMiddleware, async (req, res) => {
       return;
     }
     res.status(500).json({ success: false, error: 'Failed to update' });
+  }
+});
+
+router.get('/ads-config', authMiddleware, async (_req, res) => {
+  try {
+    const db = getDb();
+    const [row] = await db
+      .select({ value: siteSettings.value })
+      .from(siteSettings)
+      .where(eq(siteSettings.key, ADS_CONFIG_KEY))
+      .limit(1);
+
+    if (!row?.value) {
+      res.json({ success: true, data: DEFAULT_ADS_CONFIG });
+      return;
+    }
+
+    const parsed = adsConfigSchema.safeParse(JSON.parse(row.value));
+    if (!parsed.success) {
+      // eslint-disable-next-line no-console
+      console.error('[admin/ads-config:get] invalid stored config', parsed.error);
+      res.status(500).json({ success: false, error: 'Stored ads config is invalid; refusing to return fallback so it is not overwritten' });
+      return;
+    }
+
+    res.json({ success: true, data: parsed.data });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[admin/ads-config:get]', error);
+    res.status(500).json({ success: false, error: 'Failed to load ads config' });
+  }
+});
+
+router.put('/ads-config', authMiddleware, async (req, res) => {
+  try {
+    const cfg = adsConfigSchema.parse(req.body);
+    const db = getDb();
+    const value = JSON.stringify(cfg);
+
+    await db
+      .insert(siteSettings)
+      .values({ key: ADS_CONFIG_KEY, value })
+      .onConflictDoUpdate({
+        target: siteSettings.key,
+        set: { value, updatedAt: new Date() },
+      });
+
+    res.json({ success: true, data: cfg });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ success: false, error: error.errors[0].message });
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.error('[admin/ads-config]', error);
+    res.status(500).json({ success: false, error: 'Failed to save ads config' });
   }
 });
 
