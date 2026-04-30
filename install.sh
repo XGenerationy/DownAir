@@ -176,7 +176,7 @@ if [ ! -f .env ]; then
   sed -i "s|HMAC_SECRET=.*|HMAC_SECRET=$HMAC_SECRET|" .env
   sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$POSTGRES_PASSWORD|" .env
   sed -i "s|APP_URL=.*|APP_URL=https://$DOMAIN|" .env
-  sed -i "s|SETUP_COMPLETED=.*|SETUP_COMPLETED=false|" .env
+  sed -i "s|SETUP_COMPLETED=.*|SETUP_COMPLETED=true|" .env
 
   ok "All secrets generated."
 else
