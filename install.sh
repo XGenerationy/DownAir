@@ -183,6 +183,9 @@ else
   ok ".env already exists, keeping it."
 fi
 
+chmod 600 .env
+ok ".env permissions hardened (600)."
+
 # ── 9. Build and start Docker stack ──────────────────────
 next_step "Building and starting Docker stack..."
 docker compose up -d --build 2>&1 | tail -5
