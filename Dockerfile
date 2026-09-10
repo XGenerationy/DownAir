@@ -1,4 +1,4 @@
-FROM node:22-alpine AS base
+FROM node:22-alpine3.24 AS base
 
 # ── Dependencies ────────────────────────────────────────────
 FROM base AS deps
@@ -17,8 +17,8 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN apk add --no-cache python3 py3-pip ffmpeg curl \
- && pip3 install --break-system-packages yt-dlp
+RUN apk add --no-cache python3~3.14 py3-pip~26.1 ffmpeg~8.1 curl~8.22 \
+ && pip3 install --no-cache-dir --break-system-packages yt-dlp==2026.8.19
 
 RUN addgroup --system --gid 1001 downair && \
     adduser --system --uid 1001 downair
