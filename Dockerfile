@@ -17,7 +17,7 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN apk add --no-cache python3~3.14 py3-pip~26.1 ffmpeg~8.1 curl~8.22 \
+RUN apk add --no-cache python3=3.14.7-r1 py3-pip=26.1.2-r0 ffmpeg=8.1.2-r0 curl=8.22.0-r0 \
  && pip3 install --no-cache-dir --break-system-packages yt-dlp==2026.8.19
 
 RUN addgroup --system --gid 1001 downair && \
